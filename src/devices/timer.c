@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include <list.h>
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -20,6 +21,14 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+struct sleepingThread{
+  struct thread *t; //The thread that is sleeping
+  int64_t wakeup_tick; //holds the time thread should be woken up
+  struct semaphore sema; //semaphore value initialized to 0 to block thread
+  struct list_elem elem; //node so that thread can be added to a linked list
+};
+
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -30,6 +39,7 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+static struct list sleeping_threads; // global list to store sleeping threads
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -37,6 +47,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init(&sleeping_threads); //Initalize the sleeping threads list
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -84,16 +95,38 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+//compare function to so that it can compare the wake up time so that it can be inserted into a sorted list
+_Bool cmp_function(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  //pointers to the threads we want to compare
+  struct sleepingThread *thread_a = list_entry(a, struct sleepingThread, elem);
+  struct sleepingThread *thread_b = list_entry(b, struct sleepingThread, elem);
+  return thread_a->wakeup_tick < thread_b->wakeup_tick; //returns where the wakeup time for thread a is less than thread b
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+  int64_t wakeup_time = start + ticks; //calcuate wake up time by adding its start time 
+                                      //with the amount of ticks it should sleep for
+  struct sleepingThread thread_entry; //create a sleeping tread struct to add to sleeping thread list
+  //add current thread, wake up time to sleeping thread struct
+  thread_entry.t = thread_current(); 
+  thread_entry.wakeup_tick = wakeup_time; 
+  sema_init(&thread_entry.sema, 0); // initialize sema value to 0
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  //current_level used to indicate if interupts are disable or enable and disable interrupts using intr_disable()
+  enum intr_level current_level = intr_disable();
+
+  //inserts thread into sleeping list in a sorted order so that the timer interupt only needs to check first element in a list
+  list_insert_ordered(&sleeping_threads, &thread_entry.elem, cmp_function, NULL);
+  
+  //use intr_set_level function to turn interupts back on
+  intr_set_level(current_level);
+  //used sema_down to block thread until timer interrupt preforms sema_up to wake thread up
+  sema_down(&thread_entry.sema);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +205,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  while(!list_empty(&sleeping_threads)){
+    //gets the first thread element in the sleeping threads list
+    struct list_elem *element = list_front(&sleeping_threads);
+
+    //create pointer to sleepingThread using list element
+    struct sleepingThread *firstThread = list_entry(element, struct sleepingThread, elem);
+    //since the list is ordered check the wake up time for the first thread in sleeping list
+    //if its greater than the ticks it mean no threads need to be woken up and break the loop
+    if(firstThread->wakeup_tick > ticks) break; 
+
+    //if wakeup time is greater than or equal to ticks it should be woken up
+    //pop the first thread on list
+    list_pop_front(&sleeping_threads);
+
+    //wake up the thread by signaling its semaphore up
+    sema_up(&firstThread->sema);
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
