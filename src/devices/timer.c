@@ -96,7 +96,7 @@ timer_elapsed (int64_t then)
 }
 
 //compare function to so that it can compare the wake up time so that it can be inserted into a sorted list
-_Bool cmp_function(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+static _Bool cmp_function(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   //pointers to the threads we want to compare
   struct sleepingThread *thread_a = list_entry(a, struct sleepingThread, elem);
   struct sleepingThread *thread_b = list_entry(b, struct sleepingThread, elem);
