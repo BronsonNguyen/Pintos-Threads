@@ -31,20 +31,20 @@ struct thread {
   tid_t tid;                    /* Thread identifier. */
   enum thread_status status;    /* Thread state. */
   char name[16];                /* For debugging purposes. */
-  uint8_t stack;               / Saved stack pointer. */
+  uint8_t stack;               /* Saved stack pointer. */
   int priority;                 /* Effective priority. */
 
   /* Priority-donation fields. */
   int init_priority;            /* Base priority before donations. */
   struct list donations;        /* List of threads that donated to us. */
   struct list_elem donation_elem; /* List element for donations list. */
-  struct lock waiting_lock;    / Lock we’re blocked on (if any). */
+  struct lock *waiting_lock;    /* Lock we’re blocked on (if any). */
 
   struct list_elem allelem;     /* Element in all threads list. */
   struct list_elem elem;        /* Dual-purpose list element. */
 
 #ifdef USERPROG
-  uint32_t pagedir;            / Page directory (userprog). */
+  uint32_t pagedir;            /* Page directory (userprog). */
 #endif
 
   /* Owned by thread.c. */
