@@ -236,7 +236,8 @@ void thread_exit(void) {
   NOT_REACHED();
 }
 
-static void init_thread(struct thread *t, const char *name, int priority) {
+static void
+init_thread(struct thread *t, const char *name, int priority) {
   ASSERT(t != NULL);
   ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT(name != NULL);
@@ -244,16 +245,16 @@ static void init_thread(struct thread *t, const char *name, int priority) {
   memset(t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy(t->name, name, sizeof t->name);
-  t->stack = (uint8_t *)t + PGSIZE;
+  t->stack = (uint8_t *)t + PGSIZE;  // Ensure stack points to the top of the page
   t->init_priority = priority;
   t->priority = priority;
   list_init(&t->donations);
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
 
-  enum intr_level old = intr_disable();
+  enum intr_level old_level = intr_disable();
   list_push_back(&all_list, &t->allelem);
-  intr_set_level(old);
+  intr_set_level(old_level);
 }
 
 static struct thread *next_thread_to_run(void) {
