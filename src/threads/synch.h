@@ -3,7 +3,7 @@
 
 #include <list.h>
 #include <stdbool.h>
-#include "threads/thread.h" // For struct thread and priotiy handling 
+#include "threads/thread.h" // For struct thread and prioritiy handling 
 
 /* A counting semaphore. */
 struct semaphore 

@@ -98,6 +98,7 @@ const char *thread_name(void) {
 
 void thread_init(void) {
   ASSERT(intr_get_level() == INTR_OFF);
+
   lock_init(&tid_lock);
   list_init(&ready_list);
   list_init(&all_list);
@@ -106,6 +107,9 @@ void thread_init(void) {
   init_thread(initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid();
+
+  /* Add the initial thread to the all_list. */
+  list_push_back(&all_list, &initial_thread->allelem);
 }
 
 void thread_start(void) {

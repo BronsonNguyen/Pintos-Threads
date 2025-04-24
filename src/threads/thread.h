@@ -31,7 +31,7 @@ struct thread {
   tid_t tid;                    /* Thread identifier. */
   enum thread_status status;    /* Thread state. */
   char name[16];                /* For debugging purposes. */
-  uint8_t stack;               /* Saved stack pointer. */
+  uint8_t *stack;               /* Saved stack pointer. */
   int priority;                 /* Effective priority. */
 
   /* Priority-donation fields. */
