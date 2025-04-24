@@ -10,6 +10,10 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+
+static void sema_test_helper(void *sema_);
+
+
 /* -----------------------  Local helpers  ------------------------- */
 
 /* For lists of struct thread – highest priority first. */
