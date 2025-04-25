@@ -345,6 +345,11 @@ donate_priority(struct thread *holder) {
       holder->priority = cur->priority;
     }
 
+    if(depth == 0) {
+      list_remove(&cur->donation_elem);
+      list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
+    }
+
     cur = holder;
     holder = holder->waiting_lock ? holder->waiting_lock->holder : NULL;
     depth++;
