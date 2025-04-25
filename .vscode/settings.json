@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "atomic": "c",
-        "list.h": "c"
+        "list.h": "c",
+        "stack": "c"
     }
 }
