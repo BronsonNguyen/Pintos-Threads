@@ -100,9 +100,7 @@ sema_up(struct semaphore *sema) {
   sema->value++;
 
   /* Pre-empt if the awakened thread has a higher priority. */
-  if (next != NULL &&
-      next->priority > thread_current()->priority &&
-      !intr_context()) {
+  if (next != NULL && next->priority > thread_get_priority() && !intr_context()) {
     thread_yield();
   }
 
@@ -237,7 +235,6 @@ cond_signal(struct condition *cond, struct lock *lock) {
   ASSERT(lock_held_by_current_thread(lock));
 
   if (!list_empty(&cond->waiters)) {
-    list_sort(&cond->waiters, condvar_sema_priority_cmp, NULL);
     struct semaphore_elem *se = list_entry(list_pop_front(&cond->waiters),
                                            struct semaphore_elem, elem);
     sema_up(&se->semaphore);

@@ -337,41 +337,23 @@ static void kernel_thread(thread_func *function, void *aux) {
 void
 donate_priority(struct thread *holder) {
   struct thread *cur = thread_current();
-  int depth = 0;
 
-  while (holder && depth < 8) {
-    /* 1) Remove any previous donation from cur to this holder */
-    for (struct list_elem *e = list_begin(&holder->donations);
-         e != list_end(&holder->donations);
-         e = list_next(e)) {
-      struct thread *t = list_entry(e, struct thread, donation_elem);
-      if (t == cur) {
-        /* list_remove returns the next element; we can break right away */
-        list_remove(&cur->donation_elem);
-        break;
-      }
-    }
-
-    /* 2) Insert fresh donation and bump holder’s priority */
-    list_insert_ordered(&holder->donations,
-                        &cur->donation_elem,
-                        donation_priority_cmp,
-                        NULL);
-    if (cur->priority > holder->priority) {
+  while(holder && holder != cur) {
+    list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
+    if(cur->priority > holder->priority) {
       holder->priority = cur->priority;
     }
-
-    /* 3) Walk the chain (if holder itself is waiting on another lock) */
-    holder = holder->waiting_lock
-             ? holder->waiting_lock->holder
-             : NULL;
-    depth++;
   }
-}
+
+    holder = holder->waiting_lock ? holder->waiting_lock->holder : NULL;
+
+  }
+
 
 void remove_donations_for_lock(struct lock *lock) {
   struct thread *cur = thread_current();
   struct list_elem *e = list_begin(&cur->donations);
+
   while (e != list_end(&cur->donations)) {
     struct thread *t = list_entry(e, struct thread, donation_elem);
     if (t->waiting_lock == lock)
@@ -379,17 +361,24 @@ void remove_donations_for_lock(struct lock *lock) {
     else
       e = list_next(e);
   }
+
+  refresh_priority();
 }
 
 void refresh_priority(void) {
   struct thread *cur = thread_current();
-  int newp = cur->init_priority;
+  int old_priority = cur->priority;
+  int new_priority = cur->init_priority;
+
   if (!list_empty(&cur->donations)) {
-    struct thread *d = list_entry(list_front(&cur->donations), struct thread, donation_elem);
-    if (d->priority > newp)
-      newp = d->priority;
+    struct thread *highest = list_entry(list_front(&cur->donations), struct thread, donation_elem);
+    new_priority = MAX(new_priority, highest->priority);
   }
-  cur->priority = newp;
+  cur->priority = new_priority;
+
+  if(new_priority < old_priority && !list_empty(&ready_list)) {
+    thread_yield();
+  }
 }
 
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
