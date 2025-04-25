@@ -370,23 +370,15 @@ void refresh_priority(void) {
   int old_priority = cur->priority;
   int new_priority = cur->init_priority;
 
-  /* 1. Recompute effective priority from donations. */
   if (!list_empty(&cur->donations)) {
     struct thread *highest = list_entry(list_front(&cur->donations), 
-                   struct thread, donation_elem);
-    new_priority = MAX(new_priority, highest->priority);
+                                      struct thread, donation_elem);
+    new_priority = (new_priority > highest->priority) ? new_priority : highest->priority;
   }
   cur->priority = new_priority;
 
-  /* 2. Yield CPU if priority dropped AND a higher-priority thread is ready. */
-  if (new_priority < old_priority) {
-    if (!list_empty(&ready_list)) {
-      struct thread *highest_ready = list_entry(list_front(&ready_list), 
-                                               struct thread, elem);
-      if (highest_ready->priority > new_priority) {
-        thread_yield();
-      }
-    }
+  if (new_priority < old_priority && !list_empty(&ready_list)) {
+    thread_yield();
   }
 }
 
