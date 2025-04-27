@@ -386,7 +386,22 @@ void refresh_priority(void) {
   if (!list_empty(&cur->donations)) {
     struct thread *highest = list_entry(list_front(&cur->donations), 
                                       struct thread, donation_elem);
-    new_priority = (new_priority > highest->priority) ? new_priority : highest->priority;
+    new_priority = MAX(new_priority, highest->priority);
+  }
+
+  if(new_priority != old_priority) {
+    cur->priority = new_priority; 
+
+    /* If priority decreased and were not in an interrupt handler */
+    if(new_priority < old_priority && !intr_context()) {
+      if(!list_empty(&ready_list)) {
+        struct thread *highest_ready = list_entry(list_front(&ready_list), struct thread, elem);
+
+        if(highest_ready->priority > new_priority) {
+          thread_yeild();
+        }
+      }
+    }
   }
   cur->priority = new_priority;
 
