@@ -341,11 +341,11 @@ donate_priority(struct thread *holder) {
   /* Traverse the chain of locks and donate priority */
   while(holder != NULL && holder != cur) {
     struct list_elem *e;
-    for (e = list_begin(&holder->donations); e != list_end(&holder->donations); ) {
+    for (e = list_begin(&holder->donations); e != list_end(&holder->donations); e = list_next(e)) {
       struct thread *t = list_entry(e, struct thread, donation_elem);
-      e = list_next(e);
+
       if(t == cur) {
-        list_remove(&t->donation_elem);
+        list_remove(e);
         break;
       }
     }
@@ -354,12 +354,10 @@ donate_priority(struct thread *holder) {
     list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
     if(cur->priority > holder->priority) {
       holder->priority = cur->priority;
-      if(holder->waiting_lock != NULL) {
-        holder= holder->waiting_lock->holder;
-        continue;
-      }
+
     }
-    break;
+    cur = holder;
+    holder = holder->waiting_lock ? holder->waiting_lock->holder : NULL;
 
   }  
 }
