@@ -352,8 +352,6 @@ donate_priority(struct thread *holder) {
 
     /* Insert fresh donation */
     list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
-
-    /* update holder's priority if needed */
     if(cur->priority > holder->priority) {
       holder->priority = cur->priority;
       if(holder->waiting_lock != NULL) {
