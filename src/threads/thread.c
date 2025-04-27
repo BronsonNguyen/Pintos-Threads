@@ -337,22 +337,29 @@ static void kernel_thread(thread_func *function, void *aux) {
 void
 donate_priority(struct thread *holder) {
   struct thread *cur = thread_current();
-  int depth = 0;
 
-  while(holder != NULL && depth < 8) {
+  /* Traverse the chain of locks and donate priority */
+  while(holder != NULL && holder != cur) {
+    struct list_elem *e;
+    for (e = list_begin(&holder->donations); e != list_end(&holder->donations); e = list_next(e)) {
+      struct thread *t = list_entry(e, struct thread, donation_elem);
+      if(t == cur) {
+        list_remove(e);
+        break;
+      }
+    }
+
+    /* Insert fresh donation */
     list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
+
+    /* update holder's priority if needed */
     if(cur->priority > holder->priority) {
       holder->priority = cur->priority;
     }
 
-    if(depth == 0) {
-      list_remove(&cur->donation_elem);
-      list_insert_ordered(&holder->donations, &cur->donation_elem, donation_priority_cmp, NULL);
-    }
-
+    /* Move to the holder in the chain */
     cur = holder;
     holder = holder->waiting_lock ? holder->waiting_lock->holder : NULL;
-    depth++;
 
   }  
 }
