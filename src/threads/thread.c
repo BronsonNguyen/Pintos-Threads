@@ -386,7 +386,7 @@ void refresh_priority(void) {
   if (!list_empty(&cur->donations)) {
     struct thread *highest = list_entry(list_front(&cur->donations), 
                                       struct thread, donation_elem);
-    new_priority = MAX(new_priority, highest->priority);
+    new_priority = (new_priority > highest->priority) ? new_priority : highest->priority;
   }
 
   if(new_priority != old_priority) {
@@ -398,7 +398,7 @@ void refresh_priority(void) {
         struct thread *highest_ready = list_entry(list_front(&ready_list), struct thread, elem);
 
         if(highest_ready->priority > new_priority) {
-          thread_yeild();
+          thread_yield();
         }
       }
     }
