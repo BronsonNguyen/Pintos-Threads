@@ -152,6 +152,7 @@ lock_acquire(struct lock *lock)
 
   /* Yield to higher-priority thread if needed */
   thread_yield();
+  thread_maybe_yield();
 }
 
 

@@ -117,6 +117,7 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 extern fixed_point_t load_avg;          /* System load average. */
+extern struct list ready_list;
 
 void thread_init (void);
 void thread_start (void);
@@ -148,8 +149,11 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-bool compare_priority(struct list_elem *l1, struct list_elem *l2, void *aux);
+bool compare_priority(const struct list_elem *a,
+                      const struct list_elem *b,
+                      void *aux);
 void sort_ready_list(void);
+void thread_maybe_yield(void);
 void search_array(struct thread *cur,int elem);
 
 void mlfqs_calculate_priority(struct thread *t);

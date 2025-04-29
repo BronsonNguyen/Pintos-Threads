@@ -1,5 +1,5 @@
-#ifndef FIXED_POINT_H
-#define FIXED_POINT_H
+#ifndef THREADS_FIXED_POINT_H
+#define THREADS_FIXED_POINT_H
 
 /* Fixed-point arithmetic for the 4.4BSD scheduler.
    Uses 17.14 format: 17 bits for the integer part, 14 bits for the fractional part. */
@@ -44,4 +44,4 @@ typedef int fixed_point_t;
 /* Divide x by integer n */
 #define FP_DIV_INT(x, n) ((x) / (n))
 
-#endif /* fixed-point.h */
+#endif /* THREADS_FIXED_POINT_H */

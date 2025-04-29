@@ -13,6 +13,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/fixed-point.h"
+#include <list.h>  /* for list_sort/list_front */
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -657,26 +658,28 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
-/* Compares the priority of the two threards and returns true if priority 
+/* Compares the priority of the two threads and returns true if priority 
    of first thread is greater than the second thread. */
-bool compare_priority(struct list_elem *l1, struct list_elem *l2,void *aux)
-{ 
-  struct thread *t1 = list_entry(l1,struct thread,elem);
-  struct thread *t2 = list_entry(l2,struct thread,elem);
-  if( t1->priority > t2->priority)
-    return true;
-  return false;
+static bool
+compare_priority(const struct list_elem *a,
+                 const struct list_elem *b,
+                 void *aux UNUSED)
+{
+  struct thread *t1 = list_entry(a, struct thread, elem);
+  struct thread *t2 = list_entry(b, struct thread, elem);
+  return t1->priority > t2->priority;
 }
 
-/*Sorts the ready_list present in thread.c*/
- void sort_ready_list(void)
+/* Sorts the ready_list present in thread.c */
+void
+sort_ready_list(void)
 {
-  list_sort(&ready_list, compare_priority, 0);
+  list_sort(&ready_list, compare_priority, NULL);
 }
 
 /* Searches the stack of Donation priority list for the priority of the donor
    thread to remove it from the list and change the current priority 
-   accordingly*/
+   accordingly */
 void search_array(struct thread *cur,int elem)
 { int found=0;
   for(int i=0;i<(cur->size)-1;i++)
@@ -788,4 +791,17 @@ mlfqs_recalculate_recent_cpu(void)
     struct thread *t = list_entry(e, struct thread, allelem);
     mlfqs_calculate_recent_cpu(t);
   }
+}
+
+/* Yield the current thread if necessary */
+void
+thread_maybe_yield(void)
+{
+  if (intr_context())
+    intr_yield_on_return();
+  else if (!list_empty(&ready_list) &&
+           thread_current()->priority <
+             list_entry(list_front(&ready_list),
+                        struct thread, elem)->priority)
+    thread_yield();
 }
