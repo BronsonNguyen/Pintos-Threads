@@ -12,9 +12,12 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -99,6 +102,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  load_avg = INT_TO_FP(0); // for bonus
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -125,6 +130,19 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
 
+  if(thread_mlfqs){
+    if (thread_current() != idle_thread)
+        thread_current()->recent_cpu = ADD_MIX(thread_current()->recent_cpu, 1);
+
+    if (timer_ticks() % TIMER_FREQ == 0) {
+        update_load_avg();
+        update_recent_cpu_all();
+    }
+
+    if (timer_ticks() % 4 == 0)
+        update_all_priorities();
+  }
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -138,6 +156,8 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+
+  
 }
 
 /* Prints thread statistics. */
@@ -183,6 +203,13 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  // for bonus
+  if(thread_mlfqs){
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
+    thread_update_priority(t);
+  }
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -335,6 +362,10 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
+  if(thread_mlfqs){
+    return;
+  }
+
   struct thread *t = thread_current();
   t->original_priority = new_priority;
   t->priorities[0] = new_priority;
@@ -348,6 +379,9 @@ void thread_set_priority(int new_priority) {
 int
 thread_get_priority (void) 
 {
+  if(thread_mlfqs){
+    return thread_current()->priority;
+  }
   return thread_current ()->priority;
 }
 
@@ -630,4 +664,81 @@ void search_array(struct thread *cur,int elem)
     }
   }
   cur->size -=1;
+}
+
+
+// helper function for bonus
+void
+update_load_avg(void) {
+    int ready_threads = list_size(&ready_list);
+    if (thread_current() != idle_thread)
+        ready_threads++;
+
+    load_avg = ADD_FP(MUL_FP(DIV_MIX(INT_TO_FP(59), 60), load_avg),
+                      MUL_MIX(DIV_MIX(INT_TO_FP(1), 60), ready_threads));
+}
+
+void
+update_recent_cpu_all(void) {
+    struct list_elem *e;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        if (t != idle_thread) {
+            t->recent_cpu = ADD_MIX(
+                MUL_FP(DIV_FP(MUL_MIX(load_avg, 2),
+                              ADD_MIX(MUL_MIX(load_avg, 2), 1)),
+                       t->recent_cpu),
+                t->nice);
+        }
+    }
+}
+
+void
+update_all_priorities(void) {
+    struct list_elem *e;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        thread_update_priority(t);
+    }
+}
+
+void
+thread_update_priority(struct thread *t) {
+    if (t == idle_thread)
+        return;
+
+    int priority = FP_TO_INT_NEAREST(SUB_MIX(
+        SUB_FP(INT_TO_FP(PRI_MAX), DIV_MIX(t->recent_cpu, 4)),
+        t->nice * 2));
+
+    if (priority > PRI_MAX) priority = PRI_MAX;
+    if (priority < PRI_MIN) priority = PRI_MIN;
+
+    t->priority = priority;
+}
+void
+thread_set_nice(int nice)
+{
+  struct thread *t = thread_current();
+  t->nice = nice;
+  thread_update_priority(t);
+  thread_yield();
+}
+
+int
+thread_get_nice(void)
+{
+  return thread_current()->nice;
+}
+
+int
+thread_get_load_avg(void)
+{
+  return FP_TO_INT_NEAREST(MUL_MIX(load_avg, 100));
+}
+
+int
+thread_get_recent_cpu(void)
+{
+  return FP_TO_INT_NEAREST(MUL_MIX(thread_current()->recent_cpu, 100));
 }

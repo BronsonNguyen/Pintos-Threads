@@ -5,6 +5,31 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+
+/*
+
+*/
+typedef int fixed_t;
+#define F (1 << 14)
+
+#define INT_TO_FP(n) ((n) * F)
+#define FP_TO_INT_ZERO(x) ((x) / F)
+#define FP_TO_INT_NEAREST(x) (((x) >= 0) ? (((x) + F / 2) / F) : (((x) - F / 2) / F))
+
+#define ADD_FP(x, y) ((x) + (y))
+#define SUB_FP(x, y) ((x) - (y))
+#define ADD_MIX(x, n) ((x) + (n) * F)
+#define SUB_MIX(x, n) ((x) - (n) * F)
+
+#define MUL_FP(x, y) ((int64_t)(x) * (y) / F)
+#define MUL_MIX(x, n) ((x) * (n))
+
+#define DIV_FP(x, y) ((int64_t)(x) * F / (y))
+#define DIV_MIX(x, n) ((x) / (n))
+
+static fixed_t load_avg; // for bonus
+bool thread_mlfqs; // for bonus
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -23,6 +48,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+extern bool thread_mlfqs;                /* Is the MLFQS scheduler enabled? */
 
 /* A kernel thread or user process.
 
@@ -97,6 +124,9 @@ struct thread
     struct lock *waiting_for;           /* Lock for which a blocked thread waits */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    int nice;
+    fixed_t recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
