@@ -125,40 +125,39 @@ thread_start (void)
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
-void
-thread_tick (void) 
-{
-  struct thread *t = thread_current ();
-
-  if(thread_mlfqs){
-    if (thread_current() != idle_thread)
-        thread_current()->recent_cpu = ADD_MIX(thread_current()->recent_cpu, 1);
-
-    if (timer_ticks() % TIMER_FREQ == 0) {
-        update_load_avg();
-        update_recent_cpu_all();
-    }
-
-    if (timer_ticks() % 4 == 0)
-        update_all_priorities();
-  }
-
-  /* Update statistics. */
-  if (t == idle_thread)
-    idle_ticks++;
-#ifdef USERPROG
-  else if (t->pagedir != NULL)
-    user_ticks++;
-#endif
-  else
-    kernel_ticks++;
-
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
-
-  
-}
+   void
+   thread_tick (void) 
+   {
+     struct thread *t = thread_current ();
+   
+     if (thread_mlfqs) {
+       if (t != idle_thread)
+         t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
+   
+       if (timer_ticks() % TIMER_FREQ == 0) {
+         update_load_avg();
+         update_recent_cpu_all();
+       }
+   
+       if (timer_ticks() % 4 == 0) {
+         update_all_priorities();
+       }
+     }
+   
+     /* Update statistics. */
+     if (t == idle_thread)
+       idle_ticks++;
+   #ifdef USERPROG
+     else if (t->pagedir != NULL)
+       user_ticks++;
+   #endif
+     else
+       kernel_ticks++;
+   
+     /* Enforce preemption. */
+     if (++thread_ticks >= TIME_SLICE)
+       intr_yield_on_return ();
+   }
 
 /* Prints thread statistics. */
 void
