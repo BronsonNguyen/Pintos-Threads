@@ -334,13 +334,12 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
-void
-thread_set_priority (int new_priority) 
-{
-  thread_current()->priorities[0] = new_priority;
-  if(thread_current()->size==1)
-  { 
-    thread_current ()->priority = new_priority;
+void thread_set_priority(int new_priority) {
+  struct thread *t = thread_current();
+  t->original_priority = new_priority;
+  t->priorities[0] = new_priority;
+  if (t->size == 1) {
+    t->priority = new_priority;
     thread_yield();
   }
 }
@@ -469,7 +468,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
- 
+  t->original_priority = priority;
  /* Make list of priorities and not the number of 
     locks with each thread*/
   t->priorities[0] = priority;

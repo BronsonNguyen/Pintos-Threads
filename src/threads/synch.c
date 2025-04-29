@@ -110,10 +110,46 @@ lock_acquire(struct lock *lock)
   ASSERT(!intr_context());
   ASSERT(!lock_held_by_current_thread(lock));
 
-  /* Priority donation handled in thread code elsewhere */
+  struct thread *cur = thread_current();
+
+  if (lock->holder != NULL) {
+    cur->waiting_for = lock;
+    struct thread *holder = lock->holder;
+
+    while (holder != NULL) {
+      /* Check if already donated */
+      bool found = false;
+      for (int i = 0; i < holder->size; i++) {
+        if (holder->priorities[i] == cur->priority) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found && holder->size < 9) {
+        holder->priorities[holder->size++] = cur->priority;
+      }
+
+      if (cur->priority > holder->priority) {
+        holder->priority = cur->priority;
+      }
+
+      if (holder->waiting_for != NULL)
+        holder = holder->waiting_for->holder;
+      else
+        break;
+    }
+  }
+
   sema_down(&lock->semaphore);
-  lock->holder = thread_current();
+
+  cur->waiting_for = NULL;
+  lock->holder = cur;
+
+  /* Yield to higher-priority thread if needed */
+  thread_yield();
 }
+
 
 bool
 lock_try_acquire(struct lock *lock) 
@@ -134,8 +170,27 @@ lock_release(struct lock *lock)
   ASSERT(lock != NULL);
   ASSERT(lock_held_by_current_thread(lock));
 
+  struct thread *cur = thread_current();
   lock->holder = NULL;
+
+  for (struct list_elem *e = list_begin(&lock->semaphore.waiters);
+       e != list_end(&lock->semaphore.waiters);
+       e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    search_array(cur, t->priority);
+  }
+
+  /* Reset base priority */
+  int max_priority = cur->original_priority;
+  for (int i = 0; i < cur->size; i++) {
+    if (cur->priorities[i] > max_priority)
+      max_priority = cur->priorities[i];
+  }
+  cur->priority = max_priority;
+
   sema_up(&lock->semaphore);
+  thread_yield();
 }
 
 bool
