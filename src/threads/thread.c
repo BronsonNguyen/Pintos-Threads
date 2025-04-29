@@ -716,29 +716,3 @@ thread_update_priority(struct thread *t) {
 
     t->priority = priority;
 }
-void
-thread_set_nice(int nice)
-{
-  struct thread *t = thread_current();
-  t->nice = nice;
-  thread_update_priority(t);
-  thread_yield();
-}
-
-int
-thread_get_nice(void)
-{
-  return thread_current()->nice;
-}
-
-int
-thread_get_load_avg(void)
-{
-  return FP_TO_INT_NEAREST(MUL_MIX(load_avg, 100));
-}
-
-int
-thread_get_recent_cpu(void)
-{
-  return FP_TO_INT_NEAREST(MUL_MIX(thread_current()->recent_cpu, 100));
-}
