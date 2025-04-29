@@ -166,7 +166,7 @@ cond_wait(struct condition *cond, struct lock *lock)
 
   sema_init(&waiter.semaphore, 0);
   list_insert_ordered(&cond->waiters, &waiter.elem,
-                      condvar_sema_priority_cmp, NULL);
+                      sema_priority_cmp, NULL);
 
   lock_release(lock);
   sema_down(&waiter.semaphore);
@@ -184,7 +184,7 @@ cond_signal(struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty(&cond->waiters)) 
   {
     /* Wake the highest‐priority waiter */
-    list_sort(&cond->waiters, condvar_sema_priority_cmp, NULL);
+    list_sort(&cond->waiters, sema_priority_cmp, NULL);
     struct semaphore_elem *se = 
       list_entry(list_pop_front(&cond->waiters),
                  struct semaphore_elem, elem);
@@ -202,14 +202,3 @@ cond_broadcast(struct condition *cond, struct lock *lock)
     cond_signal(cond, lock);
 }
 
-static bool
-condvar_sema_priority_cmp(const struct list_elem * a, const struct list_elem *b, void *aux UNUSED)
-{
-  struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
-  struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
-
-  struct thread *t1 = list_entry(list_front(&sa->semaphore.waiters), struct thread, elem);
-  struct thread *t2 = list_entry(list_front(&sb->semaphore.waiters), struct thread, elem);
-
-  return t1->priority > t2->priority;
-}
