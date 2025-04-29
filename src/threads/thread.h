@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "threads/fixed-point.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -38,6 +40,7 @@ typedef int tid_t;
              |                |                |
              |                V                |
              |         grows downward          |
+             |                                 |
              |                                 |
              |                                 |
              |                                 |
@@ -95,6 +98,8 @@ struct thread
     int64_t wakeup_time;                /* WakeUp time for a sleeping thread. */
     int donation_no;                    /* Store the number of donation locks */
     struct lock *waiting_for;           /* Lock for which a blocked thread waits */
+    int nice;                           /* Niceness value. */
+    fixed_point_t recent_cpu;           /* Recent CPU usage. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -111,6 +116,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern fixed_point_t load_avg;          /* System load average. */
 
 void thread_init (void);
 void thread_start (void);
@@ -145,5 +151,12 @@ int thread_get_load_avg (void);
 bool compare_priority(struct list_elem *l1, struct list_elem *l2, void *aux);
 void sort_ready_list(void);
 void search_array(struct thread *cur,int elem);
+
+void mlfqs_calculate_priority(struct thread *t);
+void mlfqs_calculate_recent_cpu(struct thread *t);
+void mlfqs_calculate_load_avg(void);
+void mlfqs_increment_recent_cpu(void);
+void mlfqs_recalculate_priorities(void);
+void mlfqs_recalculate_recent_cpu(void);
 
 #endif /* threads/thread.h */

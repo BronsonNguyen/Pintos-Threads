@@ -8,7 +8,8 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include <list.h>
-  
+#include "threads/fixed-point.h"
+
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -205,6 +206,30 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  /* MLFQS calculations */
+  if (thread_mlfqs)
+  {
+    /* Increment recent_cpu every tick */
+    mlfqs_increment_recent_cpu();
+    
+    /* Update priorities every 4 ticks */
+    if (ticks % 4 == 0)
+    {
+      mlfqs_recalculate_priorities();
+    }
+    
+    /* Update load_avg and recent_cpu every second */
+    if (ticks % TIMER_FREQ == 0)
+    {
+      mlfqs_calculate_load_avg();
+      mlfqs_recalculate_recent_cpu();
+      mlfqs_recalculate_priorities(); /* Recalculate priorities again after recent_cpu update */
+    }
+    
+    /* CRITICAL: Use intr_yield_on_return instead of thread_yield in interrupt context */
+    intr_yield_on_return();
+  }
 
   while(!list_empty(&sleeping_threads)){
     //gets the first thread element in the sleeping threads list
