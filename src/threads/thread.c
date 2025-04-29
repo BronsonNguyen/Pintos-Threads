@@ -335,11 +335,18 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
-  struct thread *t = thread_current();
-  t->original_priority = new_priority;
-  t->priorities[0] = new_priority;
-  if (t->size == 1) {
-    t->priority = new_priority;
+  struct thread *cur = thread_current();
+  int old_priority = cur->priority;
+  
+  cur->original_priority = new_priority;
+
+  /* If we have no donations, set priority to original */
+  if (list_empty(&cur->donations) || new_priority > cur->priority) {
+    cur->priority = new_priority;
+  }
+
+  /* Yield if the new priority is lower and some higher-priority thread exists */
+  if (old_priority > cur->priority) {
     thread_yield();
   }
 }
@@ -471,8 +478,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->original_priority = priority;
  /* Make list of priorities and not the number of 
     locks with each thread*/
-  t->priorities[0] = priority;
+  list_init(&t->donations);
   t->donation_no=0;
+  t->donated = false;
   t->size = 1;
   t->magic = THREAD_MAGIC;
   t->waiting_for=NULL;
@@ -611,23 +619,4 @@ bool compare_priority(struct list_elem *l1, struct list_elem *l2,void *aux)
  void sort_ready_list(void)
 {
   list_sort(&ready_list, compare_priority, 0);
-}
-
-/* Searches the stack of Donation priority list for the priority of the donor
-   thread to remove it from the list and change the current priority 
-   accordingly*/
-void search_array(struct thread *cur,int elem)
-{ int found=0;
-  for(int i=0;i<(cur->size)-1;i++)
-  {
-  if(cur->priorities[i]==elem)
-    {
-     found=1;
-    }
-  if(found==1)
-    {
-     cur->priorities[i]=cur->priorities[i+1];
-    }
-  }
-  cur->size -=1;
 }
