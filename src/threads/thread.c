@@ -18,6 +18,16 @@
 #include "userprog/process.h"
 #endif
 
+/* Comparator function for thread priorities: used for list_insert_ordered. */
+bool
+thread_priority_cmp(const struct list_elem *a,
+                    const struct list_elem *b,
+                    void *aux UNUSED) {
+  const struct thread *t1 = list_entry(a, struct thread, elem);
+  const struct thread *t2 = list_entry(b, struct thread, elem);
+  return t1->priority > t2->priority;
+}
+
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -669,25 +679,29 @@ void search_array(struct thread *cur,int elem)
 // helper function for bonus
 void
 update_load_avg(void) {
+    struct thread *cur = thread_current();
     int ready_threads = list_size(&ready_list);
-    if (thread_current() != idle_thread)
+
+    if (cur != idle_thread)
         ready_threads++;
 
-    load_avg = ADD_FP(MUL_FP(DIV_MIX(INT_TO_FP(59), 60), load_avg),
-                      MUL_MIX(DIV_MIX(INT_TO_FP(1), 60), ready_threads));
+    fixed_t coef_59 = DIV_MIX(INT_TO_FP(59), 60);
+    fixed_t coef_1 = DIV_MIX(INT_TO_FP(1), 60);
+
+    load_avg = ADD_FP(MUL_FP(coef_59, load_avg),
+                      MUL_MIX(coef_1, ready_threads));
 }
 
 void
 update_recent_cpu_all(void) {
+    fixed_t double_load = MUL_MIX(load_avg, 2);
+    fixed_t load_coeff = DIV_FP(double_load, ADD_MIX(double_load, 1));
+
     struct list_elem *e;
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
         if (t != idle_thread) {
-            t->recent_cpu = ADD_MIX(
-                MUL_FP(DIV_FP(MUL_MIX(load_avg, 2),
-                              ADD_MIX(MUL_MIX(load_avg, 2), 1)),
-                       t->recent_cpu),
-                t->nice);
+            t->recent_cpu = ADD_MIX(MUL_FP(load_coeff, t->recent_cpu), t->nice);
         }
     }
 }
@@ -714,4 +728,11 @@ thread_update_priority(struct thread *t) {
     if (priority < PRI_MIN) priority = PRI_MIN;
 
     t->priority = priority;
+
+    //  If the thread is in the ready list, we need to reorder it
+    if (t != thread_current() && t->status == THREAD_READY) {
+        list_remove(&t->elem);
+        list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+    }
 }
+
