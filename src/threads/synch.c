@@ -10,6 +10,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+
 /* Comparator for sema->waiters: highest‐priority thread first. */
 static bool
 sema_priority_cmp(const struct list_elem *a,
@@ -90,8 +91,21 @@ sema_up(struct semaphore *sema)
 struct semaphore_elem 
 {
   struct list_elem elem;      /* List element. */
+  int *priority;
   struct semaphore semaphore; /* This semaphore. */
 };
+
+/* Compare two semaphore_elems based on the priority of the first thread in their waiters list */
+static bool
+cond_sema_priority_cmp(const struct list_elem *a,
+                       const struct list_elem *b,
+                       void *aux UNUSED)
+{
+  struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+  struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+  return sa->priority > sb->priority;
+}
 
 /* Lock implementation (built on semaphores). */
 
@@ -209,16 +223,16 @@ cond_init(struct condition *cond)
 void
 cond_wait(struct condition *cond, struct lock *lock) 
 {
-  struct semaphore_elem waiter;
-
   ASSERT(cond != NULL);
   ASSERT(lock != NULL);
   ASSERT(!intr_context());
   ASSERT(lock_held_by_current_thread(lock));
 
+  struct semaphore_elem waiter;
   sema_init(&waiter.semaphore, 0);
-  list_insert_ordered(&cond->waiters, &waiter.elem,
-                      sema_priority_cmp, NULL);
+  waiter.priority = thread_current()->priority;
+  /* Insert in sorted order (by priority of the waiting thread) */
+  list_insert_ordered(&cond->waiters, &waiter.elem, cond_sema_priority_cmp, NULL);
 
   lock_release(lock);
   sema_down(&waiter.semaphore);
@@ -236,7 +250,6 @@ cond_signal(struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty(&cond->waiters)) 
   {
     /* Wake the highest‐priority waiter */
-    list_sort(&cond->waiters, sema_priority_cmp, NULL);
     struct semaphore_elem *se = 
       list_entry(list_pop_front(&cond->waiters),
                  struct semaphore_elem, elem);
