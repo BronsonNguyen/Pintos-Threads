@@ -82,16 +82,24 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
-    /* Owned by thread.c. */
-    tid_t tid;                          /* Thread identifier. */
-    enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
-    uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
-    struct list_elem allelem;           /* List element for all threads list. */
-
-    /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
+   /* Owned by thread.c. */
+   tid_t tid;                          /* Thread identifier. */
+   enum thread_status status;          /* Thread state. */
+   char name[16];                      /* Name (for debugging purposes). */
+   uint8_t *stack;                     /* Saved stack pointer. */
+   int priority;                       /* Priority. */
+   int priorities[9];                  /* Donated Priority List */  
+   int size;                           /* Size of donated priority list */
+   struct list_elem allelem;           /* List element for all threads list. */
+   int64_t wakeup_time;                /* WakeUp time for a sleeping thread. */
+   int donation_no;                    /* Store the number of donation locks */
+   struct lock *waiting_for;           /* Lock for which a blocked thread waits */
+   /* Shared between thread.c and synch.c. */
+   struct list_elem elem;              /* List element. */
+   /*Alarm Sleeping Attributes*/
+   int64_t wakeup_tick;//holds the time thread should be woken up
+   struct semaphore sleep_sema;  //semaphore value initialized to 0 to block thread
+   struct list_elem sleep_elem;//node so that thread can be added to a linked list
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
