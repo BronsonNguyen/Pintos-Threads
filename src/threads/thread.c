@@ -371,15 +371,18 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
-  if(thread_mlfqs){
-    return;
+  struct thread *cur = thread_current();
+  int old_priority = cur->priority;
+  
+  cur->original_priority = new_priority;
+
+  /* If we have no donations, set priority to original */
+  if (list_empty(&cur->donations) || new_priority > cur->priority) {
+    cur->priority = new_priority;
   }
 
-  struct thread *t = thread_current();
-  t->original_priority = new_priority;
-  t->priorities[0] = new_priority;
-  if (t->size == 1) {
-    t->priority = new_priority;
+  /* Yield if the new priority is lower and some higher-priority thread exists */
+  if (old_priority > cur->priority) {
     thread_yield();
   }
 }
@@ -514,8 +517,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->original_priority = priority;
  /* Make list of priorities and not the number of 
     locks with each thread*/
-  t->priorities[0] = priority;
+  list_init(&t->donations);
   t->donation_no=0;
+  t->donated = false;
   t->size = 1;
   t->magic = THREAD_MAGIC;
   t->waiting_for=NULL;

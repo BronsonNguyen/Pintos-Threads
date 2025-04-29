@@ -116,7 +116,9 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int original_priority;
-    int priorities[9];                  /* Donated Priority List */  
+    struct list donations;            /* List of threads that donated priority to us */
+    struct list_elem donation_elem;    /* List element for being in someone else's donation list */
+    bool donated; 
     int size;                           /* Size of donated priority list */
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t wakeup_time;                /* WakeUp time for a sleeping thread. */
