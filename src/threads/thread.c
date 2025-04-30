@@ -479,9 +479,7 @@ init_thread (struct thread *t, const char *name, int priority)
  /* Make list of priorities and not the number of 
     locks with each thread*/
   list_init(&t->donations);
-  t->donation_no=0;
   t->donated = false;
-  t->size = 1;
   t->magic = THREAD_MAGIC;
   t->waiting_for=NULL;
   old_level = intr_disable ();
