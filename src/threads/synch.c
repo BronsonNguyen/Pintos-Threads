@@ -70,14 +70,17 @@ sema_up(struct semaphore *sema)
   enum intr_level old = intr_disable();
   ASSERT(sema != NULL);
 
+  struct thread *unblocked = NULL;
+
   if (!list_empty(&sema->waiters)) 
   {
     /* Wake up highest‐priority waiter */
     list_sort(&sema->waiters, sema_priority_cmp, NULL);
     struct thread *t = 
-      list_entry(list_pop_front(&sema->waiters),
-                 struct thread, elem);
-    thread_unblock(t);
+      // list_entry(list_pop_front(&sema->waiters),
+      //            struct thread, elem);
+    unblocked = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+    thread_unblock(unblocked);
   }
   sema->value++;
   intr_set_level(old);
