@@ -62,4 +62,5 @@ block_thread (void *lock_)
   lock_acquire (lock);
 
   msg ("...got it.");
+  msg ("Block thread should have already acquired lock.");
 }
