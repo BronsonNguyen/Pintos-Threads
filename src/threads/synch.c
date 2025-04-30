@@ -92,7 +92,7 @@ sema_up(struct semaphore *sema)
 struct semaphore_elem 
 {
   struct list_elem elem;      /* List element. */
-  int *priority;
+  int priority;
   struct semaphore semaphore; /* This semaphore. */
 };
 
