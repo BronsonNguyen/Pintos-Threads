@@ -259,21 +259,14 @@ thread_create (const char *name, int priority,
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
    
-void
-thread_block(void) {
-    ASSERT(!intr_context());
-    ASSERT(intr_get_level() == INTR_OFF);
-
-    struct thread *t = thread_current();
-    t->status = THREAD_BLOCKED;
-    
-    /* For MLFQS: Update priority using current values (no extra decay) */
-    if (thread_mlfqs) {
-        thread_update_priority(t);
-    }
-    
-    schedule();
-}
+   void
+   thread_block (void) {
+       ASSERT (!intr_context ());
+       ASSERT (intr_get_level () == INTR_OFF);
+   
+       thread_current ()->status = THREAD_BLOCKED;
+       schedule ();
+   }
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -284,19 +277,17 @@ thread_block(void) {
    it may expect that it can atomically unblock a thread and
    update other data. */
    void
-   thread_unblock(struct thread *t) {
-       enum intr_level old_level = intr_disable();
-       ASSERT(is_thread(t));
-       ASSERT(t->status == THREAD_BLOCKED);
+   thread_unblock (struct thread *t) {
+       enum intr_level old_level = intr_disable ();
+       ASSERT (is_thread (t));
+       ASSERT (t->status == THREAD_BLOCKED);
    
-       /* For MLFQS: Refresh priority before adding to ready list */
-       if (thread_mlfqs) {
-           thread_update_priority(t);
-       }
+       if (thread_mlfqs)
+           thread_update_priority (t);
    
        t->status = THREAD_READY;
-       list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
-       intr_set_level(old_level);
+       list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
+       intr_set_level (old_level);
    }
 
 /* Returns the name of the running thread. */
