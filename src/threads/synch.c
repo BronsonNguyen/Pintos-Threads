@@ -200,6 +200,14 @@ lock_release(struct lock *lock)
   cur->priority = max_priority;
 
   sema_up(&lock->semaphore);
+
+  if(!intr_context()){
+    struct thread *highest = get_max_priority_ready_thread();
+    if(highest != NULL && highest->priority > thread_current()->priority){
+      thread_yield();
+    }
+  }
+
   thread_yield();
 }
 

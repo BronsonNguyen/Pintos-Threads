@@ -191,4 +191,6 @@ void mlfqs_update_recent_cpu(struct thread *t);
 void mlfqs_update_priority(struct thread *t);
 void update_all_threads_stats(void);
 
+struct thread *get_highest_priority_thread(void);
+
 #endif /* threads/thread.h */

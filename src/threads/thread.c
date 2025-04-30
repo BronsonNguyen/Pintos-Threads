@@ -602,6 +602,13 @@ next_thread_to_run (void)
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
+struct thread *get_max_priority_ready_thread(void){
+  if(list_empty(&ready_list)){
+    return NULL;
+  }
+  return list_entry(list_front(&ready_list), struct thread, elem);
+}
+
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
 
