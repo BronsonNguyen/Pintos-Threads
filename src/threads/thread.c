@@ -85,6 +85,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -138,7 +139,7 @@ thread_start (void)
    void
    thread_tick (void) 
    {
-     struct thread *t = thread_current ();
+     struct thread *t = thread_current();
    
      if (thread_mlfqs) {
        if (t != idle_thread)
@@ -214,11 +215,14 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
   // for bonus
-  if(thread_mlfqs){
+  if (thread_mlfqs) {
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     thread_update_priority(t);
-  }
+} else {
+    t->priority = priority;
+    t->original_priority = priority;
+}
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -399,33 +403,42 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
-{
-  /* Not yet implemented. */
+thread_set_nice(int nice) {
+    ASSERT(nice >= -20 && nice <= 20);
+    
+    struct thread *t = thread_current();
+    enum intr_level old_level = intr_disable();
+    
+    t->nice = nice;
+    thread_update_priority(t);
+    
+    if (!list_empty(&ready_list)) {
+        struct thread *highest_ready = list_entry(list_front(&ready_list), 
+                                    struct thread, elem);
+        if (highest_ready->priority > t->priority)
+            thread_yield();
+    }
+    
+    intr_set_level(old_level);
 }
 
 /* Returns the current thread's nice value. */
 int
-thread_get_nice (void) 
-{
-  /* Not yet implemented. */
-  return 0;
+thread_get_nice(void) {
+    return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
-thread_get_load_avg (void) 
-{
-  /* Not yet implemented. */
-  return 0;
+thread_get_load_avg(void) {
+    return FP_TO_INT_NEAREST(MUL_MIX(load_avg, 100));
 }
+
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
-thread_get_recent_cpu (void) 
-{
-  /* Not yet implemented. */
-  return 0;
+thread_get_recent_cpu(void) {
+    return FP_TO_INT_NEAREST(MUL_MIX(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -526,6 +539,18 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
+
+  // for bonus
+  t->nice = 0;
+  t->recent_cpu = 0;
+
+  if(thread_mlfqs){
+    thread_update_priority(t);
+  } else {
+    t->priority = priority;
+    t->original_priority = priority;
+  }
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -683,29 +708,32 @@ void search_array(struct thread *cur,int elem)
 // helper function for bonus
 void
 update_load_avg(void) {
-    struct thread *cur = thread_current();
+    //struct thread *cur = thread_current();
     int ready_threads = list_size(&ready_list);
 
-    if (cur != idle_thread)
+    if (thread_current() != idle_thread)
         ready_threads++;
 
-    fixed_t coef_59 = DIV_MIX(INT_TO_FP(59), 60);
-    fixed_t coef_1 = DIV_MIX(INT_TO_FP(1), 60);
+    // fixed_t coef_59 = DIV_MIX(INT_TO_FP(59), 60);
+    // fixed_t coef_1 = DIV_MIX(INT_TO_FP(1), 60);
 
-    load_avg = ADD_FP(MUL_FP(coef_59, load_avg),
-                      MUL_MIX(coef_1, ready_threads));
+    fixed_t factor = DIV_FP(INT_TO_FP(59), INT_TO_FP(60));
+
+    load_avg = ADD_FP(MUL_FP(factor, load_avg),
+                     DIV_FP(INT_TO_FP(ready_threads), INT_TO_FP(60)));
 }
 
 void
 update_recent_cpu_all(void) {
-    fixed_t double_load = MUL_MIX(load_avg, 2);
-    fixed_t load_coeff = DIV_FP(double_load, ADD_MIX(double_load, 1));
+    fixed_t numerator = MUL_MIX(load_avg, 2);
+    fixed_t denominator = ADD_MIX(numerator, 1);
+    fixed_t decay_factor = DIV_FP(numerator, denominator);
 
     struct list_elem *e;
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
         if (t != idle_thread) {
-            t->recent_cpu = ADD_MIX(MUL_FP(load_coeff, t->recent_cpu), t->nice);
+            t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
         }
     }
 }
@@ -724,17 +752,17 @@ thread_update_priority(struct thread *t) {
     if (t == idle_thread)
         return;
 
-    int priority = FP_TO_INT_NEAREST(SUB_MIX(
-        SUB_FP(INT_TO_FP(PRI_MAX), DIV_MIX(t->recent_cpu, 4)),
-        t->nice * 2));
+  fixed_t recent_cpu_quarter = DIV_MIX(t->recent_cpu, 4);
+  fixed_t nice_double = INT_TO_FP(t->nice * 2);
+  fixed_t priority_fp = SUB_FP(SUB_FP(INT_TO_FP(PRI_MAX), recent_cpu_quarter), nice_double);
 
-    if (priority > PRI_MAX) priority = PRI_MAX;
-    if (priority < PRI_MIN) priority = PRI_MIN;
+    int priority = FP_TO_INT_NEAREST(priority_fp);
+    priority = priority < PRI_MIN ? PRI_MIN : (priority > PRI_MAX ? PRI_MAX : priority);
 
     t->priority = priority;
 
     //  If the thread is in the ready list, we need to reorder it
-    if (t != thread_current() && t->status == THREAD_READY) {
+    if (t->status == THREAD_READY) {
         list_remove(&t->elem);
         list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
     }

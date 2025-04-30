@@ -29,6 +29,8 @@ typedef int fixed_t;
 #define DIV_FP(x, y) ((int64_t)(x) * F / (y))
 #define DIV_MIX(x, n) ((x) / (n))
 
+#define FP_HALF (F / 2); // for bonus for rounding 
+
 static fixed_t load_avg; // for bonus
 bool thread_mlfqs; // for bonus
 
@@ -182,5 +184,11 @@ int thread_get_load_avg (void);
 bool compare_priority(struct list_elem *l1, struct list_elem *l2, void *aux);
 void sort_ready_list(void);
 void search_array(struct thread *cur,int elem);
+
+//for bonus
+void mlfqs_update_load_avg(void);
+void mlfqs_update_recent_cpu(struct thread *t);
+void mlfqs_update_priority(struct thread *t);
+void update_all_threads_stats(void);
 
 #endif /* threads/thread.h */
