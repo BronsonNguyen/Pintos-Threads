@@ -259,30 +259,29 @@ thread_create (const char *name, int priority,
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
    void
-thread_block(void) {
-    ASSERT(!intr_context());
-    ASSERT(intr_get_level() == INTR_OFF);
-
-    struct thread *t = thread_current();
-    t->status = THREAD_BLOCKED;
-    
-    /* For MLFQS, update priority immediately before blocking */
-    if (thread_mlfqs) {
-        /* Update recent_cpu with decay */
-        fixed_t numerator = MUL_MIX(load_avg, 2);
-        fixed_t denominator = ADD_MIX(numerator, 1);
-        fixed_t decay_factor = DIV_FP(numerator, denominator);
-        t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
-        
-        /* Update priority without ready list manipulation */
-        int new_priority = PRI_MAX - FP_TO_INT_NEAREST(DIV_MIX(t->recent_cpu, 4)) - (t->nice * 2);
-        new_priority = new_priority < PRI_MIN ? PRI_MIN : 
-                      (new_priority > PRI_MAX ? PRI_MAX : new_priority);
-        t->priority = new_priority;
-    }
-    
-    schedule();
-}
+   thread_block(void) {
+       ASSERT(!intr_context());
+       ASSERT(intr_get_level() == INTR_OFF);
+   
+       struct thread *t = thread_current();
+       t->status = THREAD_BLOCKED;
+       
+       /* For MLFQS, update recent_cpu with decay before blocking */
+       if (thread_mlfqs) {
+           /* Calculate decay factor */
+           fixed_t numerator = MUL_MIX(load_avg, 2);
+           fixed_t denominator = ADD_MIX(numerator, 1);
+           fixed_t decay_factor = DIV_FP(numerator, denominator);
+           
+           /* Apply decay to recent_cpu */
+           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
+           
+           /* Update priority immediately */
+           thread_update_priority(t);
+       }
+       
+       schedule();
+   }
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -292,18 +291,21 @@ thread_block(void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-void
-thread_unblock(struct thread *t) {
-    enum intr_level old_level = intr_disable();
-    ASSERT(is_thread(t));
-    ASSERT(t->status == THREAD_BLOCKED);
-
-    /* For MLFQS, just update the status and insert into ready list */
-    t->status = THREAD_READY;
-    list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
-    
-    intr_set_level(old_level);
-}
+   void
+   thread_unblock(struct thread *t) {
+       enum intr_level old_level = intr_disable();
+       ASSERT(is_thread(t));
+       ASSERT(t->status == THREAD_BLOCKED);
+   
+       /* For MLFQS, ensure priority is up-to-date */
+       if (thread_mlfqs) {
+           thread_update_priority(t);
+       }
+   
+       t->status = THREAD_READY;
+       list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+       intr_set_level(old_level);
+   }
 
 /* Returns the name of the running thread. */
 const char *
@@ -780,8 +782,10 @@ update_all_priorities(void) {
                 
                 /* Only reinsert if thread is ready */
                 if (t->status == THREAD_READY) {
+                    enum intr_level old_level = intr_disable();
                     list_remove(&t->elem);
                     list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+                    intr_set_level(old_level);
                 }
             }
         }
