@@ -767,23 +767,43 @@ update_all_priorities(void) {
 }
 
 void
-thread_update_priority(struct thread *t) {
+thread_update_priority(struct thread *t) 
+{
+    ASSERT(t != NULL);
+    
+    /* Don't update priority for idle thread */
     if (t == idle_thread)
         return;
 
-  fixed_t recent_cpu_quarter = DIV_MIX(t->recent_cpu, 4);
-  fixed_t nice_double = INT_TO_FP(t->nice * 2);
-  fixed_t priority_fp = SUB_FP(SUB_FP(INT_TO_FP(PRI_MAX), recent_cpu_quarter), nice_double);
+    /* Only calculate new priority if MLFQS is enabled */
+    if (thread_mlfqs) 
+    {
+        /* Calculate priority using the formula: 
+           PRI_MAX - (recent_cpu / 4) - (nice * 2) */
+        fixed_t recent_cpu_quarter = DIV_MIX(t->recent_cpu, 4);
+        fixed_t nice_double = INT_TO_FP(t->nice * 2);
+        fixed_t priority_fp = SUB_FP(SUB_FP(INT_TO_FP(PRI_MAX), recent_cpu_quarter), nice_double);
+        
+        /* Convert to integer with rounding and clamp to valid range */
+        int new_priority = FP_TO_INT_NEAREST(priority_fp);
+        new_priority = new_priority < PRI_MIN ? PRI_MIN : 
+                      (new_priority > PRI_MAX ? PRI_MAX : new_priority);
 
-    int priority = FP_TO_INT_NEAREST(priority_fp);
-    priority = priority < PRI_MIN ? PRI_MIN : (priority > PRI_MAX ? PRI_MAX : priority);
-
-    t->priority = priority;
-
-    //  If the thread is in the ready list, we need to reorder it
-    if (t->status == THREAD_READY) {
-        list_remove(&t->elem);
-        list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+        /* Only update if priority actually changed */
+        if (t->priority != new_priority) 
+        {
+            t->priority = new_priority;
+            
+            /* Reinsert into ready list if thread is ready */
+            if (t->status == THREAD_READY) 
+            {
+                enum intr_level old_level = intr_disable();
+                list_remove(&t->elem);
+                list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+                intr_set_level(old_level);
+            }
+        }
     }
+    /* For non-MLFQS, priority is managed by donation mechanism */
 }
 
