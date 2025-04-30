@@ -141,22 +141,19 @@ thread_start (void)
        struct thread *t = thread_current();
        
        if (thread_mlfqs) {
-           /* Only increment recent_cpu for running threads */
-           if (t != idle_thread && t->status == THREAD_RUNNING) {
-               t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
-           }
-           
-           /* Every second */
-           if (timer_ticks() % TIMER_FREQ == 0) {
-               update_load_avg();
-               update_recent_cpu_all();  // This updates all threads, including blocked ones
-           }
-           
-           /* Every 4 ticks */
-           if (timer_ticks() % 4 == 0) {
-               update_all_priorities();  // Update priorities for all threads
-           }
-       }
+        if (t != idle_thread) {
+            t->recent_cpu = ADD_MIX(t->recent_cpu, 1);  // Increment for running thread
+        }
+    
+        if (timer_ticks() % TIMER_FREQ == 0) {
+            update_load_avg();
+            update_recent_cpu_all();  // Updates recent_cpu for all threads
+        }
+    
+        if (timer_ticks() % 4 == 0) {
+            update_all_priorities();  // Update priorities every 4 ticks
+        }
+    }
        
        /* Rest of the function remains the same */
        if (t == idle_thread)
@@ -265,6 +262,9 @@ thread_create (const char *name, int priority,
        ASSERT (!intr_context ());
        ASSERT (intr_get_level () == INTR_OFF);
    
+       if(thread_mlfqs){
+        thread_update_priority(thread_current());
+       }
        thread_current ()->status = THREAD_BLOCKED;
        schedule ();
    }
