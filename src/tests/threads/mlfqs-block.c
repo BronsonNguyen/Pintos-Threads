@@ -52,13 +52,14 @@ block_thread (void *lock_)
   struct lock *lock = lock_;
   int64_t start_time;
 
-  msg ("Block thread spinning for 20 seconds...");
+  //msg ("Block thread spinning for 20 seconds...");
+  msg ("Block thread acquiring lock...");
   start_time = timer_ticks ();
   while (timer_elapsed (start_time) < 20 * TIMER_FREQ)
     continue;
 
-  msg ("Block thread acquiring lock...");
+  
   lock_acquire (lock);
 
-  msg ("...got it.\n");
+  msg ("...got it.");
 }
