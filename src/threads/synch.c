@@ -70,21 +70,24 @@ sema_up(struct semaphore *sema)
   enum intr_level old = intr_disable();
   ASSERT(sema != NULL);
 
+  struct thread *t = NULL;
+
   if (!list_empty(&sema->waiters)) 
   {
-    /* Wake up highest‐priority waiter */
     list_sort(&sema->waiters, sema_priority_cmp, NULL);
-    struct thread *t = 
-      list_entry(list_pop_front(&sema->waiters),
-                 struct thread, elem);
+    t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+    if (thread_mlfqs)
+      thread_update_priority(t);
     thread_unblock(t);
   }
   sema->value++;
-  intr_set_level(old);
 
-  /* If we just unblocked someone higher-priority than us, yield. */
-  if (!intr_context())
+  //  Yield before restoring interrupts, and only if t is higher
+  if (t != NULL && !intr_context() && t->priority > thread_current()->priority) {
     thread_yield();
+  }
+
+  intr_set_level(old);
 }
 
 /* One semaphore in a list. */
