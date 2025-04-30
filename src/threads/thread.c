@@ -138,37 +138,38 @@ thread_start (void)
    Thus, this function runs in an external interrupt context. */
    void
    thread_tick(void) {
-     struct thread *t = thread_current();
-   
-     if (thread_mlfqs) {
-       if (t != idle_thread)
-         t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
-   
-      /* every second */
-       if (timer_ticks() % TIMER_FREQ == 0) {
-         update_load_avg();
-         update_recent_cpu_all();
+       struct thread *t = thread_current();
+       
+       if (thread_mlfqs) {
+           /* Only increment recent_cpu for running threads */
+           if (t != idle_thread && t->status == THREAD_RUNNING) {
+               t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
+           }
+           
+           /* Every second */
+           if (timer_ticks() % TIMER_FREQ == 0) {
+               update_load_avg();
+               update_recent_cpu_all();  // This updates all threads, including blocked ones
+           }
+           
+           /* Every 4 ticks */
+           if (timer_ticks() % 4 == 0) {
+               update_all_priorities();  // Update priorities for all threads
+           }
        }
-   
-      /* every 4 ticks*/
-       if (timer_ticks() % 4 == 0) {
-         update_all_priorities();
-       }
-     }
-   
-     /* Update statistics. */
-     if (t == idle_thread)
-       idle_ticks++;
+       
+       /* Rest of the function remains the same */
+       if (t == idle_thread)
+           idle_ticks++;
    #ifdef USERPROG
-     else if (t->pagedir != NULL)
-       user_ticks++;
+       else if (t->pagedir != NULL)
+           user_ticks++;
    #endif
-     else
-       kernel_ticks++;
+       else
+           kernel_ticks++;
    
-     /* Enforce preemption. */
-     if (++thread_ticks >= TIME_SLICE)
-       intr_yield_on_return ();
+       if (++thread_ticks >= TIME_SLICE)
+           intr_yield_on_return();
    }
 
 /* Prints thread statistics. */
@@ -265,15 +266,16 @@ thread_create (const char *name, int priority,
        struct thread *t = thread_current();
        t->status = THREAD_BLOCKED;
        
-       /* If MLFQS, ensure blocked threads don't accumulate unfair CPU time */
+       /* For MLFQS, update recent_cpu before blocking */
        if (thread_mlfqs) {
-           /* Force update of recent_cpu before blocking */
-           if (timer_ticks() % TIMER_FREQ != 0) {
-               fixed_t numerator = MUL_MIX(load_avg, 2);
-               fixed_t denominator = ADD_MIX(numerator, 1);
-               fixed_t decay_factor = DIV_FP(numerator, denominator);
-               t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
-           }
+           /* Apply decay to recent_cpu immediately */
+           fixed_t numerator = MUL_MIX(load_avg, 2);
+           fixed_t denominator = ADD_MIX(numerator, 1);
+           fixed_t decay_factor = DIV_FP(numerator, denominator);
+           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
+           
+           /* Force priority update before blocking */
+           thread_update_priority(t);
        }
        
        schedule();
@@ -287,19 +289,28 @@ thread_create (const char *name, int priority,
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-void
-thread_unblock (struct thread *t) 
-{
-  enum intr_level old_level;
-
-  ASSERT (is_thread (t));
-
-  old_level = intr_disable ();
-  ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, compare_priority, 0);
-  t->status = THREAD_READY;
-  intr_set_level (old_level);
-}
+   void
+   thread_unblock(struct thread *t) {
+       enum intr_level old_level = intr_disable();
+       ASSERT(is_thread(t));
+       ASSERT(t->status == THREAD_BLOCKED);
+   
+       /* For MLFQS, update thread's stats before unblocking */
+       if (thread_mlfqs) {
+           /* Update recent_cpu with decay */
+           fixed_t numerator = MUL_MIX(load_avg, 2);
+           fixed_t denominator = ADD_MIX(numerator, 1);
+           fixed_t decay_factor = DIV_FP(numerator, denominator);
+           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
+           
+           /* Update priority */
+           thread_update_priority(t);
+       }
+   
+       list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+       t->status = THREAD_READY;
+       intr_set_level(old_level);
+   }
 
 /* Returns the name of the running thread. */
 const char *
@@ -742,6 +753,7 @@ update_load_avg(void) {
                       MUL_MIX(one_sixtieth, ready_threads));
 }
 
+
 void
 update_recent_cpu_all(void) {
     fixed_t numerator = MUL_MIX(load_avg, 2);
@@ -752,6 +764,7 @@ update_recent_cpu_all(void) {
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
         if (t != idle_thread) {
+            /* Apply decay to all threads (including blocked ones) */
             t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
         }
     }
