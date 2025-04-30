@@ -286,28 +286,23 @@ thread_create (const char *name, int priority,
    update other data. */
    void
    thread_unblock (struct thread *t) {
-       enum intr_level old_level = intr_disable();
+       enum intr_level old_level = intr_disable ();
        ASSERT (is_thread (t));
        ASSERT (t->status == THREAD_BLOCKED);
    
-       t->status = THREAD_READY;
-   
        if (thread_mlfqs) {
-           thread_update_priority(t);
-       }
+        // enum intr_level old_level = intr_disable();
+        // // This will refresh recent_cpu in case it became stale while blocked
+        // update_recent_cpu_all();
+        // intr_set_level(old_level);
+    
+        thread_update_priority(t);
+    }
    
-       list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
-   
-       // Optional: immediately yield if unblocked thread is higher priority
-       if (!intr_context() &&
-           thread_current() != idle_thread &&
-           t->priority > thread_current()->priority) {
-           intr_yield_on_return();
-       }
-   
-       intr_set_level(old_level);
+       t->status = THREAD_READY;
+       list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
+       intr_set_level (old_level);
    }
-   
 
 /* Returns the name of the running thread. */
 const char *
