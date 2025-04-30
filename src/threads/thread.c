@@ -137,19 +137,20 @@ thread_start (void)
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
    void
-   thread_tick (void) 
-   {
+   thread_tick(void) {
      struct thread *t = thread_current();
    
      if (thread_mlfqs) {
        if (t != idle_thread)
          t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
    
+      /* every second */
        if (timer_ticks() % TIMER_FREQ == 0) {
          update_load_avg();
          update_recent_cpu_all();
        }
    
+      /* every 4 ticks*/
        if (timer_ticks() % 4 == 0) {
          update_all_priorities();
        }
@@ -216,8 +217,8 @@ thread_create (const char *name, int priority,
 
   // for bonus
   if (thread_mlfqs) {
-    t->nice = thread_current()->nice;
-    t->recent_cpu = thread_current()->recent_cpu;
+    t->nice = 0;
+    t->recent_cpu = 0;
     thread_update_priority(t);
 } else {
     t->priority = priority;
@@ -241,7 +242,11 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  thread_yield();
+
+  /* Yield only if the new thread has higher priority */
+  if(!thread_mlfqs && thread_current()->priority < t->priority) {
+    thread_yield();
+  }
 
   return tid;
 }
@@ -252,15 +257,27 @@ thread_create (const char *name, int priority,
    This function must be called with interrupts turned off.  It
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
-void
-thread_block (void) 
-{
-  ASSERT (!intr_context ());
-  ASSERT (intr_get_level () == INTR_OFF);
-
-  thread_current ()->status = THREAD_BLOCKED;
-  schedule ();
-}
+   void
+   thread_block(void) {
+       ASSERT(!intr_context());
+       ASSERT(intr_get_level() == INTR_OFF);
+   
+       struct thread *t = thread_current();
+       t->status = THREAD_BLOCKED;
+       
+       /* If MLFQS, ensure blocked threads don't accumulate unfair CPU time */
+       if (thread_mlfqs) {
+           /* Force update of recent_cpu before blocking */
+           if (timer_ticks() % TIMER_FREQ != 0) {
+               fixed_t numerator = MUL_MIX(load_avg, 2);
+               fixed_t denominator = ADD_MIX(numerator, 1);
+               fixed_t decay_factor = DIV_FP(numerator, denominator);
+               t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
+           }
+       }
+       
+       schedule();
+   }
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -404,7 +421,8 @@ thread_get_priority (void)
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice(int nice) {
-    ASSERT(nice >= -20 && nice <= 20);
+    /* Enforce nice value range */
+    nice = nice < -20 ? -20 : (nice > 20 ? 20 : nice);
     
     struct thread *t = thread_current();
     enum intr_level old_level = intr_disable();
@@ -412,10 +430,11 @@ thread_set_nice(int nice) {
     t->nice = nice;
     thread_update_priority(t);
     
+    /* Yield if we're no longer the highest priority */
     if (!list_empty(&ready_list)) {
-        struct thread *highest_ready = list_entry(list_front(&ready_list), 
-                                    struct thread, elem);
-        if (highest_ready->priority > t->priority)
+        struct thread *highest = list_entry(list_front(&ready_list), 
+                                         struct thread, elem);
+        if (highest->priority > t->priority)
             thread_yield();
     }
     
@@ -714,13 +733,13 @@ update_load_avg(void) {
     if (thread_current() != idle_thread)
         ready_threads++;
 
-    // fixed_t coef_59 = DIV_MIX(INT_TO_FP(59), 60);
-    // fixed_t coef_1 = DIV_MIX(INT_TO_FP(1), 60);
+    fixed_t fifty_nine_sixteiths = DIV_FP(INT_TO_FP(59), INT_TO_FP(60));
+    fixed_t one_sixtieth = DIV_FP(INT_TO_FP(1), INT_TO_FP(60));
 
-    fixed_t factor = DIV_FP(INT_TO_FP(59), INT_TO_FP(60));
+    // fixed_t factor = DIV_FP(INT_TO_FP(59), INT_TO_FP(60));
 
-    load_avg = ADD_FP(MUL_FP(factor, load_avg),
-                     DIV_FP(INT_TO_FP(ready_threads), INT_TO_FP(60)));
+    load_avg = ADD_FP(MUL_FP(fifty_nine_sixteiths, load_avg),
+                      MUL_MIX(one_sixtieth, ready_threads));
 }
 
 void
