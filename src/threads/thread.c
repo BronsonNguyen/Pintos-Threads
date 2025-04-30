@@ -259,27 +259,30 @@ thread_create (const char *name, int priority,
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
    void
-   thread_block(void) {
-       ASSERT(!intr_context());
-       ASSERT(intr_get_level() == INTR_OFF);
-   
-       struct thread *t = thread_current();
-       t->status = THREAD_BLOCKED;
-       
-       /* For MLFQS, update recent_cpu before blocking */
-       if (thread_mlfqs) {
-           /* Apply decay to recent_cpu immediately */
-           fixed_t numerator = MUL_MIX(load_avg, 2);
-           fixed_t denominator = ADD_MIX(numerator, 1);
-           fixed_t decay_factor = DIV_FP(numerator, denominator);
-           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
-           
-           /* Force priority update before blocking */
-           thread_update_priority(t);
-       }
-       
-       schedule();
-   }
+thread_block(void) {
+    ASSERT(!intr_context());
+    ASSERT(intr_get_level() == INTR_OFF);
+
+    struct thread *t = thread_current();
+    t->status = THREAD_BLOCKED;
+    
+    /* For MLFQS, update priority immediately before blocking */
+    if (thread_mlfqs) {
+        /* Update recent_cpu with decay */
+        fixed_t numerator = MUL_MIX(load_avg, 2);
+        fixed_t denominator = ADD_MIX(numerator, 1);
+        fixed_t decay_factor = DIV_FP(numerator, denominator);
+        t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
+        
+        /* Update priority without ready list manipulation */
+        int new_priority = PRI_MAX - FP_TO_INT_NEAREST(DIV_MIX(t->recent_cpu, 4)) - (t->nice * 2);
+        new_priority = new_priority < PRI_MIN ? PRI_MIN : 
+                      (new_priority > PRI_MAX ? PRI_MAX : new_priority);
+        t->priority = new_priority;
+    }
+    
+    schedule();
+}
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -289,28 +292,18 @@ thread_create (const char *name, int priority,
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-   void
-   thread_unblock(struct thread *t) {
-       enum intr_level old_level = intr_disable();
-       ASSERT(is_thread(t));
-       ASSERT(t->status == THREAD_BLOCKED);
-   
-       /* For MLFQS, update thread's stats before unblocking */
-       if (thread_mlfqs) {
-           /* Update recent_cpu with decay */
-           fixed_t numerator = MUL_MIX(load_avg, 2);
-           fixed_t denominator = ADD_MIX(numerator, 1);
-           fixed_t decay_factor = DIV_FP(numerator, denominator);
-           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
-           
-           /* Update priority */
-           thread_update_priority(t);
-       }
-   
-       list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
-       t->status = THREAD_READY;
-       intr_set_level(old_level);
-   }
+void
+thread_unblock(struct thread *t) {
+    enum intr_level old_level = intr_disable();
+    ASSERT(is_thread(t));
+    ASSERT(t->status == THREAD_BLOCKED);
+
+    /* For MLFQS, just update the status and insert into ready list */
+    t->status = THREAD_READY;
+    list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+    
+    intr_set_level(old_level);
+}
 
 /* Returns the name of the running thread. */
 const char *
@@ -775,7 +768,23 @@ update_all_priorities(void) {
     struct list_elem *e;
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
-        thread_update_priority(t);
+        if (t != idle_thread) {
+            /* Calculate new priority */
+            int new_priority = PRI_MAX - FP_TO_INT_NEAREST(DIV_MIX(t->recent_cpu, 4)) - (t->nice * 2);
+            new_priority = new_priority < PRI_MIN ? PRI_MIN : 
+                          (new_priority > PRI_MAX ? PRI_MAX : new_priority);
+            
+            /* Update if changed */
+            if (t->priority != new_priority) {
+                t->priority = new_priority;
+                
+                /* Only reinsert if thread is ready */
+                if (t->status == THREAD_READY) {
+                    list_remove(&t->elem);
+                    list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
+                }
+            }
+        }
     }
 }
 
