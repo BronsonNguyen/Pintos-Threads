@@ -289,10 +289,6 @@ thread_create (const char *name, int priority,
        t->status = THREAD_READY;
        list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
        intr_set_level (old_level);
-
-       if(!intr_context() && thread_current()->priority < t->priority) {
-        thread_yield();
-       }
    }
 
 /* Returns the name of the running thread. */
