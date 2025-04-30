@@ -155,11 +155,6 @@ void thread_tick(void) {
         if (timer_ticks() % 4 == 0) {
             update_all_priorities();
         }
-
-        if(timer_ticks() % 100 == 0) {
-            printf("[TICK] Thread: %s, Priority: %d, Recent_CPU: %d, Nice: %dLoad Avg: %d\n",
-              thread_current()->name, thread_current()->priority, FP_TO_INT_NEAREST(thread_current()->recent_cpu), thread_current()->nice, FP_TO_INT_NEAREST(load_avg));
-        }
     }
 
     /* Update statistics. */
@@ -225,8 +220,6 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  printf("[CREATE] Thread: %s, Priority: %d, Nice: %d, Recent_CPU: %d\n", t->name, t->priority, t->nice, FP_TO_INT_NEAREST(t->recent_cpu));
-
   // for bonus
   if (thread_mlfqs) {
     // FIX: Inherit parent's nice value instead of setting to 0
@@ -279,9 +272,6 @@ thread_create (const char *name, int priority,
       //  if(thread_mlfqs){
       //   thread_update_priority(thread_current());
       //  }
-
-      printf("[BLOCK] Thread: %s, Priority: %d\n", thread_current()->name, thread_current()->priority);
-
        thread_current ()->status = THREAD_BLOCKED;
        schedule ();
    }
@@ -309,9 +299,6 @@ thread_create (const char *name, int priority,
         thread_update_priority(t);
     }
    
-    printf("[UNBLOCK] Thread: %s, Priority: %d, Recent_CPU: %d, Nice: %d\n",
-      t->name, t->priority, FP_TO_INT_NEAREST(t->recent_cpu), t->nice);
-      
        t->status = THREAD_READY;
        list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
        intr_set_level (old_level);
