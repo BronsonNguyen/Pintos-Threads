@@ -258,30 +258,22 @@ thread_create (const char *name, int priority,
    This function must be called with interrupts turned off.  It
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
-   void
-   thread_block(void) {
-       ASSERT(!intr_context());
-       ASSERT(intr_get_level() == INTR_OFF);
    
-       struct thread *t = thread_current();
-       t->status = THREAD_BLOCKED;
-       
-       /* For MLFQS, update recent_cpu with decay before blocking */
-       if (thread_mlfqs) {
-           /* Calculate decay factor */
-           fixed_t numerator = MUL_MIX(load_avg, 2);
-           fixed_t denominator = ADD_MIX(numerator, 1);
-           fixed_t decay_factor = DIV_FP(numerator, denominator);
-           
-           /* Apply decay to recent_cpu */
-           t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
-           
-           /* Update priority immediately */
-           thread_update_priority(t);
-       }
-       
-       schedule();
-   }
+void
+thread_block(void) {
+    ASSERT(!intr_context());
+    ASSERT(intr_get_level() == INTR_OFF);
+
+    struct thread *t = thread_current();
+    t->status = THREAD_BLOCKED;
+    
+    /* For MLFQS: Update priority using current values (no extra decay) */
+    if (thread_mlfqs) {
+        thread_update_priority(t);
+    }
+    
+    schedule();
+}
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -297,7 +289,7 @@ thread_create (const char *name, int priority,
        ASSERT(is_thread(t));
        ASSERT(t->status == THREAD_BLOCKED);
    
-       /* For MLFQS, ensure priority is up-to-date */
+       /* For MLFQS: Refresh priority before adding to ready list */
        if (thread_mlfqs) {
            thread_update_priority(t);
        }
