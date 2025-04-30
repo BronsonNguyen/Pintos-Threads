@@ -74,18 +74,19 @@ sema_up(struct semaphore *sema)
 
   if (!list_empty(&sema->waiters)) 
   {
-    /* Wake up highest‐priority waiter */
     list_sort(&sema->waiters, sema_priority_cmp, NULL);
-    struct thread *t = 
-      // list_entry(list_pop_front(&sema->waiters),
-      //            struct thread, elem);
     unblocked = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+
+    if (thread_mlfqs) {
+      thread_update_priority(unblocked); //Update priority before unblock
+    }
+
     thread_unblock(unblocked);
   }
+
   sema->value++;
   intr_set_level(old);
 
-  /* If we just unblocked someone higher-priority than us, yield. */
   if (!intr_context())
     thread_yield();
 }
