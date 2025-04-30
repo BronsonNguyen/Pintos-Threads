@@ -218,13 +218,14 @@ thread_create (const char *name, int priority,
 
   // for bonus
   if (thread_mlfqs) {
-    t->nice = 0;
+    // FIX: Inherit parent's nice value instead of setting to 0
+    t->nice = thread_current()->nice;  // Was t->nice = 0;
     t->recent_cpu = 0;
     thread_update_priority(t);
-} else {
+  } else {
     t->priority = priority;
     t->original_priority = priority;
-}
+  }
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
