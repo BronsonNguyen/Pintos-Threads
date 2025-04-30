@@ -269,9 +269,9 @@ thread_create (const char *name, int priority,
        ASSERT (!intr_context ());
        ASSERT (intr_get_level () == INTR_OFF);
    
-       if(thread_mlfqs){
-        thread_update_priority(thread_current());
-       }
+      //  if(thread_mlfqs){
+      //   thread_update_priority(thread_current());
+      //  }
        thread_current ()->status = THREAD_BLOCKED;
        schedule ();
    }
@@ -290,8 +290,14 @@ thread_create (const char *name, int priority,
        ASSERT (is_thread (t));
        ASSERT (t->status == THREAD_BLOCKED);
    
-       if (thread_mlfqs)
-           thread_update_priority (t);
+       if (thread_mlfqs) {
+        enum intr_level old_level = intr_disable();
+        // This will refresh recent_cpu in case it became stale while blocked
+        update_recent_cpu_all();
+        intr_set_level(old_level);
+    
+        thread_update_priority(t);
+    }
    
        t->status = THREAD_READY;
        list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
