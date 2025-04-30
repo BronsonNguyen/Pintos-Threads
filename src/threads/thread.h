@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "threads/synch.h"
 
+#define MAX_DONORS 8
+
 /*
 
 */
@@ -120,6 +122,9 @@ struct thread
     struct list_elem donation_elem;    /* List element for being in someone else's donation list */
     bool donated; 
     int size;                           /* Size of donated priority list */
+
+    int priorities[MAX_DONORS];    /* Stack of donated priorities */
+
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t wakeup_time;                /* WakeUp time for a sleeping thread. */
     int donation_no;                    /* Store the number of donation locks */
