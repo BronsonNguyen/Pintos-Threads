@@ -220,7 +220,7 @@ thread_create (const char *name, int priority,
   if (thread_mlfqs) {
     // FIX: Inherit parent's nice value instead of setting to 0
     t->nice = thread_current()->nice;  // Was t->nice = 0;
-    t->recent_cpu = 0;
+    t->recent_cpu = thread_current()->recent_cpu;  // Was t->recent_cpu = 0;
     thread_update_priority(t);
   } else {
     t->priority = priority;
