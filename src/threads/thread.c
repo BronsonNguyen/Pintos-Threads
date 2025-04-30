@@ -136,38 +136,45 @@ thread_start (void)
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
-   void
-   thread_tick(void) {
-       struct thread *t = thread_current();
-       
-       if (thread_mlfqs) {
+void thread_tick(void) {
+    struct thread *t = thread_current();
+
+    /* Update recent_cpu for the running thread. */
+    if (thread_mlfqs) {
         if (t != idle_thread) {
-            t->recent_cpu = ADD_MIX(t->recent_cpu, 1);  // Increment for running thread
+            t->recent_cpu = ADD_MIX(t->recent_cpu, 1);
         }
-    
+
+        /* Update load_avg and recent_cpu for all threads every second. */
         if (timer_ticks() % TIMER_FREQ == 0) {
             update_load_avg();
-            update_recent_cpu_all();  // Updates recent_cpu for all threads
+            update_recent_cpu_all();
         }
-    
+
+        /* Update priorities for all threads every 4 ticks. */
         if (timer_ticks() % 4 == 0) {
-            update_all_priorities();  // Update priorities every 4 ticks
+            update_all_priorities();
         }
     }
-       
-       /* Rest of the function remains the same */
-       if (t == idle_thread)
-           idle_ticks++;
-   #ifdef USERPROG
-       else if (t->pagedir != NULL)
-           user_ticks++;
-   #endif
-       else
-           kernel_ticks++;
-   
-       if (++thread_ticks >= TIME_SLICE)
-           intr_yield_on_return();
-   }
+
+    /* Update statistics. */
+    if (t == idle_thread) {
+        idle_ticks++;
+    }
+#ifdef USERPROG
+    else if (t->pagedir != NULL) {
+        user_ticks++;
+    }
+#endif
+    else {
+        kernel_ticks++;
+    }
+
+    /* Enforce time slice. */
+    if (++thread_ticks >= TIME_SLICE) {
+        intr_yield_on_return();
+    }
+}
 
 /* Prints thread statistics. */
 void
@@ -743,7 +750,7 @@ update_recent_cpu_all(void) {
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
         if (t != idle_thread) {
-            /* Apply decay to all threads (including blocked ones) */
+            /* Update recent_cpu for all threads, including blocked ones. */
             t->recent_cpu = ADD_MIX(MUL_FP(decay_factor, t->recent_cpu), t->nice);
         }
     }
@@ -755,16 +762,16 @@ update_all_priorities(void) {
     for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
         struct thread *t = list_entry(e, struct thread, allelem);
         if (t != idle_thread) {
-            /* Calculate new priority */
+            /* Calculate new priority. */
             int new_priority = PRI_MAX - FP_TO_INT_NEAREST(DIV_MIX(t->recent_cpu, 4)) - (t->nice * 2);
             new_priority = new_priority < PRI_MIN ? PRI_MIN : 
                           (new_priority > PRI_MAX ? PRI_MAX : new_priority);
-            
-            /* Update if changed */
+
+            /* Update priority if it has changed. */
             if (t->priority != new_priority) {
                 t->priority = new_priority;
-                
-                /* Only reinsert if thread is ready */
+
+                /* Reinsert into ready list if thread is ready. */
                 if (t->status == THREAD_READY) {
                     enum intr_level old_level = intr_disable();
                     list_remove(&t->elem);
@@ -776,37 +783,33 @@ update_all_priorities(void) {
     }
 }
 
-void
-thread_update_priority(struct thread *t) 
-{
+void thread_update_priority(struct thread *t) {
     ASSERT(t != NULL);
-    
-    /* Don't update priority for idle thread */
-    if (t == idle_thread)
-        return;
 
-    /* Only calculate new priority if MLFQS is enabled */
-    if (thread_mlfqs) 
-    {
-        /* Calculate priority using the formula: 
-           PRI_MAX - (recent_cpu / 4) - (nice * 2) */
+    /* Don't update priority for idle thread. */
+    if (t == idle_thread) {
+        return;
+    }
+
+    /* Only calculate new priority if MLFQS is enabled. */
+    if (thread_mlfqs) {
+        /* Calculate priority using the formula:
+           PRI_MAX - (recent_cpu / 4) - (nice * 2). */
         fixed_t recent_cpu_quarter = DIV_MIX(t->recent_cpu, 4);
         fixed_t nice_double = INT_TO_FP(t->nice * 2);
         fixed_t priority_fp = SUB_FP(SUB_FP(INT_TO_FP(PRI_MAX), recent_cpu_quarter), nice_double);
-        
-        /* Convert to integer with rounding and clamp to valid range */
+
+        /* Convert to integer with rounding and clamp to valid range. */
         int new_priority = FP_TO_INT_NEAREST(priority_fp);
         new_priority = new_priority < PRI_MIN ? PRI_MIN : 
                       (new_priority > PRI_MAX ? PRI_MAX : new_priority);
 
-        /* Only update if priority actually changed */
-        if (t->priority != new_priority) 
-        {
+        /* Update priority if it has changed. */
+        if (t->priority != new_priority) {
             t->priority = new_priority;
-            
-            /* Reinsert into ready list if thread is ready */
-            if (t->status == THREAD_READY) 
-            {
+
+            /* Reinsert into ready list if thread is ready. */
+            if (t->status == THREAD_READY) {
                 enum intr_level old_level = intr_disable();
                 list_remove(&t->elem);
                 list_insert_ordered(&ready_list, &t->elem, thread_priority_cmp, NULL);
@@ -814,6 +817,5 @@ thread_update_priority(struct thread *t)
             }
         }
     }
-    /* For non-MLFQS, priority is managed by donation mechanism */
 }
 
